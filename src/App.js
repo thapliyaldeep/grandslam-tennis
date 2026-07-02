@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { RegistrationGate, RegistrationManager, DoublesTeamBuilder } from './Registration';
 import { auth, signInWithGoogle, signOutUser, dbGet, dbSet, dbUpdate, dbListen,
          getAllLeagues, createLeague, settingsPath, playersPath, groupsPath,
          matchesPath, matchPath, usersPath } from './firebase';
@@ -281,49 +282,59 @@ function LeagueSelector({user, guestMode, onSelect, onCreateLeague}) {
           </div>
         </div>
 
-        {leagues.length === 0 ? (
-          <div style={{...S.card,textAlign:'center',padding:'48px 24px'}}>
-            <div style={{fontSize:40,marginBottom:12}}>🎾</div>
-            <div style={{fontWeight:700,color:colors.baseline,marginBottom:8}}>No leagues yet</div>
-            <div style={{color:colors.textMuted,fontSize:13,marginBottom:24}}>
-              Create the first league to get started
-            </div>
-            {!guestMode && (
-              <button onClick={onCreateLeague} style={{...btn.primary}}>
-                + Create League
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16,marginBottom:24}}>
-              {leagues.map(league => (
-                <div key={league.id} onClick={()=>onSelect(league.id)}
-                  style={{...S.card,cursor:'pointer',transition:'all 0.15s',
-                    borderLeft:`4px solid ${colors.clay}`}}
-                  onMouseEnter={e=>e.currentTarget.style.boxShadow=shadows.cardHover}
-                  onMouseLeave={e=>e.currentTarget.style.boxShadow=shadows.card}>
-                  <div style={{fontFamily:fonts.display,fontWeight:700,fontSize:18,
-                    color:colors.baseline,marginBottom:4}}>{league.name}</div>
-                  <div style={{fontSize:12,color:colors.textMuted,marginBottom:12}}>
-                    {league.seasonStart && league.seasonEnd
-                      ? `${league.seasonStart} – ${league.seasonEnd}`
-                      : 'Season dates TBD'}
-                  </div>
-                  <div style={{fontSize:12,color:colors.net,fontWeight:600}}>
-                    Tap to {guestMode ? 'watch' : 'enter'} →
-                  </div>
-                </div>
-              ))}
-            </div>
+        {(() => {
+          // Guests only see public leagues; logged-in users see all
+          const visibleLeagues = guestMode
+            ? leagues.filter(l => l.isPublic !== false)
+            : leagues;
 
-            {!guestMode && (
-              <button onClick={onCreateLeague} style={{...btn.secondary}}>
-                + Create New League
-              </button>
-            )}
-          </>
-        )}
+          return visibleLeagues.length === 0 ? (
+            <div style={{...S.card,textAlign:'center',padding:'48px 24px'}}>
+              <div style={{fontSize:40,marginBottom:12}}>🎾</div>
+              <div style={{fontWeight:700,color:colors.baseline,marginBottom:8}}>
+                {guestMode ? 'No public leagues available' : 'No leagues yet'}
+              </div>
+              <div style={{color:colors.textMuted,fontSize:13,marginBottom:24}}>
+                {guestMode
+                  ? 'Ask your league manager for a direct link to watch matches'
+                  : 'Create the first league to get started'}
+              </div>
+              {!guestMode && (
+                <button onClick={onCreateLeague} style={{...btn.primary}}>
+                  + Create League
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16,marginBottom:24}}>
+                {visibleLeagues.map(league => (
+                  <div key={league.id} onClick={()=>onSelect(league.id)}
+                    style={{...S.card,cursor:'pointer',transition:'all 0.15s',
+                      borderLeft:`4px solid ${colors.clay}`}}
+                    onMouseEnter={e=>e.currentTarget.style.boxShadow=shadows.cardHover}
+                    onMouseLeave={e=>e.currentTarget.style.boxShadow=shadows.card}>
+                    <div style={{fontFamily:fonts.display,fontWeight:700,fontSize:18,
+                      color:colors.baseline,marginBottom:4}}>{league.name}</div>
+                    <div style={{fontSize:12,color:colors.textMuted,marginBottom:12}}>
+                      {league.seasonStart && league.seasonEnd
+                        ? `${league.seasonStart} – ${league.seasonEnd}`
+                        : 'Season dates TBD'}
+                    </div>
+                    <div style={{fontSize:12,color:colors.net,fontWeight:600}}>
+                      Tap to {guestMode ? 'watch' : 'enter'} →
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {!guestMode && (
+                <button onClick={onCreateLeague} style={{...btn.secondary}}>
+                  + Create New League
+                </button>
+              )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );
@@ -403,7 +414,10 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [guestMode, setGuestMode] = useState(false);
   const [screen, setScreen] = useState('leagues'); // leagues | createLeague | league
-  const [activeLeagueId, setActiveLeagueId] = useState(null);
+
+  // Check URL for direct league link: ?league=leagueId
+  const urlLeagueId = new URLSearchParams(window.location.search).get('league');
+  const [activeLeagueId, setActiveLeagueId] = useState(urlLeagueId || null);
 
   // Auth listener
   useEffect(() => {
@@ -414,17 +428,38 @@ export default function App() {
     });
   }, []);
 
+  // If URL has a league ID, go straight to that league
+  useEffect(() => {
+    if (urlLeagueId) setScreen('league');
+  }, [urlLeagueId]);
+
+  const goToLeague = (id) => {
+    setActiveLeagueId(id);
+    setScreen('league');
+    // Update URL without page reload
+    window.history.pushState({}, '', `?league=${id}`);
+  };
+
+  const goBack = () => {
+    setActiveLeagueId(null);
+    setScreen('leagues');
+    window.history.pushState({}, '', window.location.pathname);
+  };
+
   if (authState === 'checking') return <LoadingScreen/>;
 
-  // Not logged in and not guest → show login
+  // If URL has league ID and user is not logged in → show login with guest option
+  // pointing directly to that league
   if (authState === 'loggedOut' && !guestMode) {
-    return <LoginPage onGuest={() => { setGuestMode(true); setScreen('leagues'); }}/>;
+    return <LoginPage
+      onGuest={() => { setGuestMode(true); if (urlLeagueId) setScreen('league'); }}
+    />;
   }
 
   if (screen === 'createLeague') {
     return <CreateLeagueForm
       user={user}
-      onCreated={(id) => { setActiveLeagueId(id); setScreen('league'); }}
+      onCreated={(id) => goToLeague(id)}
       onCancel={() => setScreen('leagues')}
     />;
   }
@@ -434,14 +469,14 @@ export default function App() {
       leagueId={activeLeagueId}
       user={user}
       guestMode={guestMode}
-      onBack={() => { setActiveLeagueId(null); setScreen('leagues'); }}
+      onBack={goBack}
     />;
   }
 
   return <LeagueSelector
     user={user}
     guestMode={guestMode}
-    onSelect={(id) => { setActiveLeagueId(id); setScreen('league'); }}
+    onSelect={(id) => goToLeague(id)}
     onCreateLeague={() => setScreen('createLeague')}
   />;
 }
@@ -455,6 +490,8 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
   const [groups, setGroups] = useState({doubles:{A:[],B:[]},singles:{A:[],B:[]}});
   const [matches, setMatches] = useState({doubles:{}, singles:{}});
   const [status, setStatus] = useState('loading');
+  const [registrationStatus, setRegistrationStatus] = useState('checking'); // checking | registered | unregistered
+  const [registeredName, setRegisteredName] = useState('');
 
   const isManager = !guestMode && user &&
     (settings?.managers||[]).includes(user.email?.toLowerCase());
@@ -485,10 +522,35 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
       });
     }));
 
+    // Check registration status for logged-in non-guest users
+    if (user && !guestMode) {
+      unsubs.push(dbListen(`leagues/${leagueId}/registrations/${user.uid}`, reg => {
+        if (!reg) { setRegistrationStatus('unregistered'); return; }
+        if (reg.status === 'approved') {
+          setRegistrationStatus('registered');
+          setRegisteredName(reg.name);
+        } else {
+          setRegistrationStatus(reg.status); // pending or rejected
+        }
+      }));
+    } else {
+      setRegistrationStatus('guest');
+    }
+
     return () => unsubs.forEach(u => u());
-  }, [leagueId]);
+  }, [leagueId, user, guestMode]);
 
   if (status === 'loading') return <LoadingScreen message="Loading league…"/>;
+
+  // Show registration gate for non-managers who aren't registered yet
+  if (!guestMode && user && !isManager && !isAdmin && registrationStatus !== 'registered') {
+    return <RegistrationGate
+      leagueId={leagueId}
+      user={user}
+      leagueName={settings?.name || 'this league'}
+      onRegistered={(name) => { setRegisteredName(name); setRegistrationStatus('registered'); }}
+    />;
+  }
 
   const currentMatches = toArr(matches[lg]);
   const done = currentMatches.filter(m => m.done);
@@ -1010,14 +1072,7 @@ function KnockoutConnector({winner, flip}) {
 
 // ─── Manage Tab ────────────────────────────────────────────────────────────
 function ManageTab({leagueId, players, groups, settings, isAdmin, data}) {
-  const [section, setSection] = useState('players');
-
-  const addPlayer = async (type, name) => {
-    if (!name.trim()) return;
-    const current = toArr(players[type]);
-    if (current.includes(name.trim())) return;
-    await dbSet(playersPath(leagueId, type), [...current, name.trim()]);
-  };
+  const [section, setSection] = useState('registrations');
 
   const removePlayer = async (type, name) => {
     if (!window.confirm(`Remove "${name}"?`)) return;
@@ -1035,11 +1090,19 @@ function ManageTab({leagueId, players, groups, settings, isAdmin, data}) {
     URL.revokeObjectURL(url);
   };
 
+  const sections = [
+    ['registrations','📋 Registrations'],
+    ['teams','👥 Build Teams'],
+    ['singles','👤 Singles'],
+    ['groups','📊 Groups'],
+    ['settings','⚙️ Settings'],
+  ];
+
   return (
     <div>
       {/* Section tabs */}
       <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
-        {[['players','👥 Players'],['groups','📊 Groups'],['settings','⚙️ Settings']].map(([id,label])=>(
+        {sections.map(([id,label])=>(
           <button key={id} onClick={()=>setSection(id)} style={S.pill(section===id)}>
             {label}
           </button>
@@ -1049,10 +1112,54 @@ function ManageTab({leagueId, players, groups, settings, isAdmin, data}) {
         </button>
       </div>
 
-      {section==='players' && (
-        <PlayersSection leagueId={leagueId} players={players}
-          addPlayer={addPlayer} removePlayer={removePlayer}/>
+      {/* Registrations — approve/reject players */}
+      {section==='registrations' && (
+        <div>
+          <div style={{fontWeight:700,color:colors.baseline,fontSize:15,marginBottom:16}}>
+            Player Registrations
+          </div>
+          <RegistrationManager leagueId={leagueId}/>
+        </div>
       )}
+
+      {/* Build doubles teams from approved players */}
+      {section==='teams' && (
+        <div>
+          <div style={{fontWeight:700,color:colors.baseline,fontSize:15,marginBottom:4}}>
+            Build Doubles Teams
+          </div>
+          <div style={{fontSize:13,color:colors.textMuted,marginBottom:16}}>
+            Select 2 approved players to form a doubles team. Players can also be added to singles.
+          </div>
+          <DoublesTeamBuilder leagueId={leagueId}/>
+        </div>
+      )}
+
+      {/* Singles players list */}
+      {section==='singles' && (
+        <div>
+          <div style={{fontWeight:700,color:colors.baseline,fontSize:15,marginBottom:16}}>
+            Singles Players ({toArr(players.singles).length})
+          </div>
+          <div style={{border:`1px solid ${colors.courtDeep}`,borderRadius:radii.md,overflow:'hidden',marginBottom:16}}>
+            {toArr(players.singles).length===0 ? (
+              <div style={{padding:'24px',textAlign:'center',color:colors.textMuted,fontSize:13}}>
+                No singles players yet. Add them from the Build Teams tab.
+              </div>
+            ) : toArr(players.singles).map((name,i)=>(
+              <div key={name} style={{display:'flex',justifyContent:'space-between',
+                alignItems:'center',padding:'10px 16px',
+                background:i%2===0?'#fff':colors.court,
+                borderBottom:`1px solid ${colors.courtDeep}`}}>
+                <span style={{fontSize:13,fontWeight:500,color:colors.textPrimary}}>👤 {name}</span>
+                <button onClick={()=>removePlayer('singles',name)}
+                  style={{...btn.danger,padding:'3px 8px',fontSize:11}}>Remove</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {section==='groups' && (
         <GroupsSection leagueId={leagueId} players={players} groups={groups}/>
       )}
@@ -1161,8 +1268,9 @@ function GroupsSection({leagueId, players, groups}) {
 }
 
 function SettingsSection({leagueId, settings}) {
-  const [form, setForm] = useState(settings||{});
+  const [form, setForm] = useState({isPublic: true, ...settings});
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const save = async () => {
     await dbUpdate(settingsPath(leagueId), form);
@@ -1170,21 +1278,80 @@ function SettingsSection({leagueId, settings}) {
     setTimeout(()=>setSaved(false), 2000);
   };
 
+  const shareUrl = `${window.location.origin}${window.location.pathname}?league=${leagueId}`;
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   return (
-    <div style={{...S.card,maxWidth:440}}>
-      <div style={{fontWeight:700,color:colors.baseline,fontSize:15,marginBottom:20}}>
-        League Settings
-      </div>
-      {[['name','League Name'],['seasonStart','Season Start'],['seasonEnd','Season End']].map(([k,l])=>(
-        <div key={k} style={{marginBottom:14}}>
-          <label style={labelStyle}>{l}</label>
-          <input value={form[k]||''} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))}
-            style={inputStyle}/>
+    <div style={{maxWidth:480}}>
+      <div style={{...S.card}}>
+        <div style={{fontWeight:700,color:colors.baseline,fontSize:15,marginBottom:20}}>
+          League Settings
         </div>
-      ))}
-      <button onClick={save} style={{...btn.primary}}>
-        {saved?'✓ Saved':'Save Settings'}
-      </button>
+        {[['name','League Name'],['seasonStart','Season Start'],['seasonEnd','Season End']].map(([k,l])=>(
+          <div key={k} style={{marginBottom:14}}>
+            <label style={labelStyle}>{l}</label>
+            <input value={form[k]||''} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))}
+              style={inputStyle}/>
+          </div>
+        ))}
+
+        {/* Public toggle */}
+        <div style={{marginBottom:20,padding:'14px 16px',background:colors.court,
+          borderRadius:radii.md,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontWeight:600,color:colors.baseline,fontSize:13}}>
+              Public League
+            </div>
+            <div style={{fontSize:11,color:colors.textMuted,marginTop:2}}>
+              {form.isPublic !== false
+                ? 'Visible to guests in the league list'
+                : 'Hidden from guests — share direct link only'}
+            </div>
+          </div>
+          <button onClick={()=>setForm(f=>({...f,isPublic:f.isPublic===false?true:false}))}
+            style={{
+              width:44, height:24, borderRadius:12, border:'none', cursor:'pointer',
+              background: form.isPublic !== false ? colors.baseline : colors.textMuted,
+              position:'relative', transition:'background 0.2s',
+            }}>
+            <div style={{
+              position:'absolute', top:3, width:18, height:18, borderRadius:'50%',
+              background:'#fff', transition:'left 0.2s',
+              left: form.isPublic !== false ? 23 : 3,
+            }}/>
+          </button>
+        </div>
+
+        <button onClick={save} style={{...btn.primary}}>
+          {saved?'✓ Saved':'Save Settings'}
+        </button>
+      </div>
+
+      {/* Share link */}
+      <div style={{...S.card}}>
+        <div style={{fontWeight:700,color:colors.baseline,fontSize:15,marginBottom:6}}>
+          Direct League Link
+        </div>
+        <div style={{fontSize:12,color:colors.textMuted,marginBottom:14}}>
+          Share this link with players or guests to go directly to this league
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <div style={{flex:1,padding:'9px 12px',background:colors.court,
+            borderRadius:radii.md,fontSize:12,color:colors.textSecondary,
+            fontFamily:fonts.mono,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            {shareUrl}
+          </div>
+          <button onClick={copyLink} style={{...btn.primary,padding:'9px 16px',whiteSpace:'nowrap'}}>
+            {copied ? '✓ Copied!' : '📋 Copy'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
