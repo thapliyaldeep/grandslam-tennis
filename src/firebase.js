@@ -106,27 +106,41 @@ export const registrationsPath = (leagueId) => `leagues/${leagueId}/registration
 export const registrationPath = (leagueId, uid) => `leagues/${leagueId}/registrations/${uid}`;
 
 // Player submits registration request
-export const submitRegistration = async (leagueId, user, name) => {
+// enrollment: 'singles' | 'doubles' | 'both'
+export const submitRegistration = async (leagueId, user, name, enrollment = 'both') => {
   await dbSet(registrationPath(leagueId, user.uid), {
     uid: user.uid,
     name: name.trim(),
     email: user.email,
+    enrollment,
     status: 'pending',
     requestedAt: Date.now(),
   });
 };
 
-// Manager approves registration — adds player to individual pool
-export const approveRegistration = async (leagueId, uid, name) => {
+// Manager approves registration — adds player to correct pools based on enrollment
+export const approveRegistration = async (leagueId, uid, name, enrollment = 'both') => {
   await dbUpdate(registrationPath(leagueId, uid), {
     status: 'approved',
     approvedAt: Date.now(),
   });
-  // Add to individual player pool
-  const existing = await dbGet(individualPlayersPath(leagueId));
-  const arr = existing ? Object.values(existing) : [];
-  if (!arr.find(p => p.uid === uid)) {
-    await dbPush(individualPlayersPath(leagueId), { uid, name });
+
+  // Add to individual player pool (for doubles team building)
+  if (enrollment === 'doubles' || enrollment === 'both') {
+    const existing = await dbGet(individualPlayersPath(leagueId));
+    const arr = existing ? Object.values(existing) : [];
+    if (!arr.find(p => p.uid === uid)) {
+      await dbPush(individualPlayersPath(leagueId), { uid, name, enrollment });
+    }
+  }
+
+  // If singles or both — add directly to singles roster
+  if (enrollment === 'singles' || enrollment === 'both') {
+    const currentSingles = await dbGet(`leagues/${leagueId}/players/singles`);
+    const singlesArr = currentSingles ? Object.values(currentSingles) : [];
+    if (!singlesArr.includes(name)) {
+      await dbSet(`leagues/${leagueId}/players/singles`, [...singlesArr, name]);
+    }
   }
 };
 
