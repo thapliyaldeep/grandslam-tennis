@@ -290,8 +290,8 @@ function RegistrationRow({ reg, onApprove, onReject, onRemove, approved, rejecte
             color: reg.enrollment === 'singles' ? '#1E40AF'
               : reg.enrollment === 'doubles' ? '#065F46' : '#6B21A8',
           }}>
-            {reg.enrollment === 'singles' ? '👤 Singles'
-              : reg.enrollment === 'doubles' ? '👥 Doubles'
+            {reg.enrollment === 'singles' ? '👤 Singles only'
+              : reg.enrollment === 'doubles' ? '👥 Doubles only'
               : '🎾 Singles & Doubles'}
           </span>
           <span style={{ fontSize: 10, color: colors.textMuted }}>
