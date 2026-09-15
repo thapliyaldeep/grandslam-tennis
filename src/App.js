@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RegistrationGate, RegistrationManager, DoublesTeamBuilder } from './Registration';
 import { ScheduleTab } from './Schedule';
+import { LiveMatch } from './LiveScore';
 import { auth, signInWithGoogle, signOutUser, dbGet, dbSet, dbUpdate, dbListen,
          getAllLeagues, createLeague, settingsPath, playersPath, groupsPath,
          matchesPath, matchPath, usersPath } from './firebase';
@@ -491,7 +492,8 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
   const [groups, setGroups] = useState({doubles:{A:[],B:[]},singles:{A:[],B:[]}});
   const [matches, setMatches] = useState({doubles:{}, singles:{}});
   const [status, setStatus] = useState('loading');
-  const [registrationStatus, setRegistrationStatus] = useState('checking'); // checking | registered | unregistered
+  const [registrationStatus, setRegistrationStatus] = useState('checking');
+  const [liveMatchData, setLiveMatchData] = useState(null); // {matchId, nameA, nameB} // checking | registered | unregistered
   const [registeredName, setRegisteredName] = useState('');
 
   const isManager = !guestMode && user &&
@@ -542,6 +544,21 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
   }, [leagueId, user, guestMode]);
 
   if (status === 'loading') return <LoadingScreen message="Loading league…"/>;
+
+  // Live scoring takes over the whole screen
+  if (liveMatchData) {
+    return <LiveMatch
+      leagueId={leagueId}
+      lg={liveMatchData.lg}
+      matchId={liveMatchData.matchId}
+      nameA={liveMatchData.nameA}
+      nameB={liveMatchData.nameB}
+      user={user}
+      isManager={isManager}
+      onClose={() => setLiveMatchData(null)}
+      onMatchComplete={() => setLiveMatchData(null)}
+    />;
+  }
 
   // Show registration gate for non-managers who aren't registered yet
   if (!guestMode && user && !isManager && !isAdmin && registrationStatus !== 'registered') {
@@ -640,6 +657,12 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
             players={players[lg]}
             isManager={isManager}
             guestMode={guestMode}
+            onGoLive={(m) => setLiveMatchData({
+              matchId: m.id,
+              lg,
+              nameA: m.a,
+              nameB: m.b,
+            })}
           />
         )}
 
@@ -693,7 +716,7 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
 }
 
 // ─── Scores Tab ────────────────────────────────────────────────────────────
-function ScoresTab({leagueId, lg, matches, done, pending, players, isManager, guestMode}) {
+function ScoresTab({leagueId, lg, matches, done, pending, players, isManager, guestMode, onGoLive}) {
   const [modal, setModal] = useState(null); // null | 'addMatch' | 'enterScore'
   const [form, setForm] = useState({});
 
@@ -843,7 +866,7 @@ function ScoresTab({leagueId, lg, matches, done, pending, players, isManager, gu
 }
 
 // ─── Match Card ────────────────────────────────────────────────────────────
-function MatchCard({m, done, isManager, onScore, onDelete}) {
+function MatchCard({m, done, isManager, onScore, onDelete, onGoLive}) {
   const winner = done ? scoreWinner(m.sa, m.sb) : null;
 
   return (
@@ -884,16 +907,25 @@ function MatchCard({m, done, isManager, onScore, onDelete}) {
           <div style={{fontSize:11,color:colors.textMuted}}>
             {m.venue && `📍 ${m.venue}`}
           </div>
-          {isManager && (
-            <div style={{display:'flex',gap:6}}>
-              <button onClick={onScore} style={{...btn.ghost,padding:'4px 10px',fontSize:11}}>
-                ✏️ {done?'Edit':'Score'}
+          <div style={{display:'flex',gap:6}}>
+            {onGoLive && (
+              <button onClick={onGoLive}
+                style={{...btn.primary,padding:'4px 12px',fontSize:11,
+                  background:'#ef4444',borderColor:'#ef4444'}}>
+                🔴 Live
               </button>
-              <button onClick={onDelete} style={{...btn.danger,padding:'4px 10px',fontSize:11}}>
-                🗑
-              </button>
-            </div>
-          )}
+            )}
+            {isManager && (
+              <>
+                <button onClick={onScore} style={{...btn.ghost,padding:'4px 10px',fontSize:11}}>
+                  ✏️ {done?'Edit':'Score'}
+                </button>
+                <button onClick={onDelete} style={{...btn.danger,padding:'4px 10px',fontSize:11}}>
+                  🗑
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
