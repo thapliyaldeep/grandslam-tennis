@@ -1164,7 +1164,8 @@ function ManageTab({leagueId, players, groups, settings, isAdmin, data}) {
         <GroupsSection leagueId={leagueId} players={players} groups={groups}/>
       )}
       {section==='settings' && (
-        <SettingsSection leagueId={leagueId} settings={settings}/>
+        <SettingsSection leagueId={leagueId} settings={settings}
+          currentUserEmail={user?.email?.toLowerCase()}/>
       )}
     </div>
   );
@@ -1267,10 +1268,12 @@ function GroupsSection({leagueId, players, groups}) {
   );
 }
 
-function SettingsSection({leagueId, settings}) {
+function SettingsSection({leagueId, settings, currentUserEmail}) {
   const [form, setForm] = useState({isPublic: true, ...settings});
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [newManager, setNewManager] = useState('');
+  const [managerMsg, setManagerMsg] = useState('');
 
   const save = async () => {
     await dbUpdate(settingsPath(leagueId), form);
@@ -1285,6 +1288,26 @@ function SettingsSection({leagueId, settings}) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const addManager = async () => {
+    const email = newManager.trim().toLowerCase();
+    if (!email) return;
+    const current = form.managers || [];
+    if (current.includes(email)) { setManagerMsg('Already a manager'); return; }
+    const updated = [...current, email];
+    await dbUpdate(settingsPath(leagueId), { managers: updated });
+    setForm(f => ({...f, managers: updated}));
+    setNewManager('');
+    setManagerMsg(`${email} added as manager`);
+    setTimeout(() => setManagerMsg(''), 3000);
+  };
+
+  const removeManager = async (email) => {
+    if (email === currentUserEmail) { setManagerMsg("You can't remove yourself"); return; }
+    const updated = (form.managers || []).filter(m => m !== email);
+    await dbUpdate(settingsPath(leagueId), { managers: updated });
+    setForm(f => ({...f, managers: updated}));
   };
 
   return (
@@ -1331,6 +1354,52 @@ function SettingsSection({leagueId, settings}) {
         <button onClick={save} style={{...btn.primary}}>
           {saved?'✓ Saved':'Save Settings'}
         </button>
+      </div>
+
+      {/* Managers */}
+      <div style={{...S.card}}>
+        <div style={{fontWeight:700,color:colors.baseline,fontSize:15,marginBottom:6}}>
+          League Managers
+        </div>
+        <div style={{fontSize:12,color:colors.textMuted,marginBottom:14}}>
+          Managers can add matches, approve registrations, and manage the league
+        </div>
+        {/* Current managers */}
+        <div style={{marginBottom:14}}>
+          {(form.managers||[]).map(email => (
+            <div key={email} style={{display:'flex',justifyContent:'space-between',
+              alignItems:'center',padding:'8px 12px',borderRadius:radii.md,
+              background:colors.court,marginBottom:6}}>
+              <div style={{fontSize:13,color:colors.baseline,fontWeight:500}}>
+                {email === currentUserEmail ? `${email} (you)` : email}
+              </div>
+              {email !== currentUserEmail && (
+                <button onClick={()=>removeManager(email)}
+                  style={{...btn.danger,padding:'3px 8px',fontSize:11}}>
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {/* Add manager */}
+        <div style={{display:'flex',gap:8}}>
+          <input
+            placeholder="Enter email address"
+            value={newManager}
+            onChange={e=>setNewManager(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&addManager()}
+            style={{...inputStyle,flex:1,marginBottom:0}}
+          />
+          <button onClick={addManager} style={{...btn.primary,padding:'9px 16px',whiteSpace:'nowrap'}}>
+            Add
+          </button>
+        </div>
+        {managerMsg && (
+          <div style={{fontSize:12,color:colors.net,marginTop:8,fontWeight:600}}>
+            {managerMsg}
+          </div>
+        )}
       </div>
 
       {/* Share link */}
