@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RegistrationGate, RegistrationManager, DoublesTeamBuilder } from './Registration';
+import { ScheduleTab } from './Schedule';
 import { auth, signInWithGoogle, signOutUser, dbGet, dbSet, dbUpdate, dbListen,
          getAllLeagues, createLeague, settingsPath, playersPath, groupsPath,
          matchesPath, matchPath, usersPath } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { colors, fonts, btn, radii, shadows, googleFontsUrl } from './theme';
+import { colors, fonts, btn, radii, shadows } from './theme';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 const ADMIN_EMAIL = "deepcolour@gmail.com";
@@ -15,7 +16,7 @@ const toObj = v => !v ? {} : (Array.isArray(v) ? Object.fromEntries(v.map((x,i)=
 
 function scoreWinner(sa, sb) {
   if (!sa || !sb) return null;
-  const aSets = sa.trim().split(' '), bSets = sb.trim().split(' ');
+  const aSets = sa.trim().split(' '), _bSets = sb.trim().split(' '); // eslint-disable-line
   let wa = 0, wb = 0;
   for (let i = 0; i < aSets.length; i++) {
     const [ga, gb] = aSets[i].split('-').map(Number);
@@ -666,14 +667,23 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
         )}
 
         {/* Coming soon tabs */}
-        {(tab==='schedule'||tab==='polls'||tab==='banter') && (
+        {tab==='schedule' && (
+          <ScheduleTab
+            leagueId={leagueId}
+            lg={lg}
+            players={lg === 'doubles' ? players.doubles : players.singles}
+            isManager={isManager}
+            user={user}
+            matches={currentMatches}
+          />
+        )}
+
+        {(tab==='polls'||tab==='banter') && (
           <div style={{...S.card,textAlign:'center',padding:'48px 24px'}}>
             <div style={{fontSize:32,marginBottom:12}}>🚧</div>
             <div style={{fontWeight:700,color:colors.baseline,marginBottom:8}}>Coming Soon</div>
             <div style={{color:colors.textMuted,fontSize:13}}>
-              {tab==='schedule' ? 'Schedule & availability coordination'
-                : tab==='polls' ? 'League polls and voting'
-                : 'Team banter and chat'}
+              {tab==='polls' ? 'League polls and voting' : 'Team banter and chat'}
             </div>
           </div>
         )}
