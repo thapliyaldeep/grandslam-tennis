@@ -783,6 +783,7 @@ function ScoresTab({leagueId, lg, matches, done, pending, players, isManager, gu
             <MatchCard key={m.id} m={m} isManager={isManager}
               onScore={()=>{setModal('enterScore');setForm({...m,sa:'',sb:'',});}}
               onDelete={()=>deleteMatch(m.id)}
+              onGoLive={onGoLive ? ()=>onGoLive(m) : null}
             />
           ))}
         </div>
