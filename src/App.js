@@ -661,6 +661,7 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
             settings={settings}
             isAdmin={isAdmin}
             data={{matches, players, groups}}
+            user={user}
           />
         )}
 
@@ -1071,7 +1072,7 @@ function KnockoutConnector({winner, flip}) {
 }
 
 // ─── Manage Tab ────────────────────────────────────────────────────────────
-function ManageTab({leagueId, players, groups, settings, isAdmin, data}) {
+function ManageTab({leagueId, players, groups, settings, isAdmin, data, user}) {
   const [section, setSection] = useState('registrations');
 
   const removePlayer = async (type, name) => {
@@ -1165,7 +1166,7 @@ function ManageTab({leagueId, players, groups, settings, isAdmin, data}) {
       )}
       {section==='settings' && (
         <SettingsSection leagueId={leagueId} settings={settings}
-          currentUserEmail={user?.email?.toLowerCase()}/>
+          currentUserEmail={user?.email?.toLowerCase?.()}/>
       )}
     </div>
   );
