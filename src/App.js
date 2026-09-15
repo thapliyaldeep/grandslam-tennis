@@ -901,7 +901,7 @@ function MatchCard({m, done, isManager, onScore, onDelete, onGoLive}) {
       </div>
 
       {/* Footer: venue + actions */}
-      {(m.venue || isManager) && (
+      {(m.venue || isManager || (!done && onGoLive)) && (
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',
           marginTop:10,paddingTop:8,borderTop:`1px solid ${colors.courtDeep}`}}>
           <div style={{fontSize:11,color:colors.textMuted}}>
