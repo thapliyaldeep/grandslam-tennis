@@ -496,8 +496,10 @@ function LeagueApp({leagueId, user, guestMode, onBack}) {
   const [liveMatchData, setLiveMatchData] = useState(null); // {matchId, nameA, nameB} // checking | registered | unregistered
   const [registeredName, setRegisteredName] = useState('');
 
-  const isManager = !guestMode && user &&
-    (settings?.managers||[]).includes(user.email?.toLowerCase());
+  const isManager = !guestMode && user && (
+    (settings?.managers||[]).includes(user.email?.toLowerCase()) ||
+    !!(settings?.managerUids && settings.managerUids[user.uid])
+  );
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   // Load league data
@@ -1318,9 +1320,13 @@ function SettingsSection({leagueId, settings, currentUserEmail}) {
   const [copied, setCopied] = useState(false);
   const [newManager, setNewManager] = useState('');
   const [managerMsg, setManagerMsg] = useState('');
+  const [newUid, setNewUid] = useState('');
+  const [regs, setRegs] = useState({});
+  useEffect(() => dbListen(`leagues/${leagueId}/registrations`, d => setRegs(d || {})), [leagueId]);
 
   const save = async () => {
-    await dbUpdate(settingsPath(leagueId), form);
+    const rest = Object.fromEntries(Object.entries(form).filter(([k]) => k !== 'managerUids' && k !== 'managers'));
+    await dbUpdate(settingsPath(leagueId), rest);
     setSaved(true);
     setTimeout(()=>setSaved(false), 2000);
   };
@@ -1345,6 +1351,22 @@ function SettingsSection({leagueId, settings, currentUserEmail}) {
     setNewManager('');
     setManagerMsg(`${email} added as manager`);
     setTimeout(() => setManagerMsg(''), 3000);
+  };
+
+  const addManagerUid = async () => {
+    const uid = newUid.trim();
+    if (!uid) return;
+    if (!/^[A-Za-z0-9_-]{10,128}$/.test(uid)) { setManagerMsg("That doesn't look like a valid UID"); return; }
+    if (settings?.managerUids?.[uid]) { setManagerMsg('Already a manager'); return; }
+    await dbSet(`${settingsPath(leagueId)}/managerUids/${uid}`, true);
+    setNewUid('');
+    setManagerMsg(`${regs[uid]?.name || uid} added as manager`);
+    setTimeout(() => setManagerMsg(''), 3000);
+  };
+
+  const removeManagerUid = async (uid) => {
+    if (uid === auth.currentUser?.uid) { setManagerMsg("You can't remove yourself"); return; }
+    await dbSet(`${settingsPath(leagueId)}/managerUids/${uid}`, null);
   };
 
   const removeManager = async (email) => {
@@ -1438,6 +1460,41 @@ function SettingsSection({leagueId, settings, currentUserEmail}) {
           <button onClick={addManager} style={{...btn.primary,padding:'9px 16px',whiteSpace:'nowrap'}}>
             Add
           </button>
+        </div>
+        <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${colors.courtDeep}`}}>
+          <div style={{fontSize:12,fontWeight:600,color:colors.textSecondary,marginBottom:8}}>
+            Managers by UID
+          </div>
+          {Object.keys(settings?.managerUids || {}).map(uid => (
+            <div key={uid} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+              padding:'8px 12px',borderRadius:radii.md,background:colors.court,marginBottom:6}}>
+              <div>
+                <div style={{fontSize:13,color:colors.baseline,fontWeight:500}}>
+                  {regs[uid]?.name || 'Unknown player'}{uid === auth.currentUser?.uid ? ' (you)' : ''}
+                </div>
+                <div style={{fontSize:10,color:colors.textMuted,fontFamily:fonts.mono}}>{uid}</div>
+              </div>
+              {uid !== auth.currentUser?.uid && (
+                <button onClick={()=>removeManagerUid(uid)}
+                  style={{...btn.danger,padding:'3px 8px',fontSize:11}}>Remove</button>
+              )}
+            </div>
+          ))}
+          <div style={{display:'flex',gap:8,marginTop:8}}>
+            <input placeholder="Paste user UID" value={newUid}
+              onChange={e=>setNewUid(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&addManagerUid()}
+              style={{...inputStyle,flex:1,marginBottom:0,fontFamily:fonts.mono,fontSize:12}}/>
+            <button onClick={addManagerUid}
+              style={{...btn.primary,padding:'9px 16px',whiteSpace:'nowrap'}}>Add</button>
+          </div>
+          {newUid.trim() && (
+            <div style={{fontSize:11,color:colors.textMuted,marginTop:6}}>
+              {regs[newUid.trim()]
+                ? `Matches: ${regs[newUid.trim()].name} (${regs[newUid.trim()].email})`
+                : 'No registration found for this UID, but it will still be saved'}
+            </div>
+          )}
         </div>
         {managerMsg && (
           <div style={{fontSize:12,color:colors.net,marginTop:8,fontWeight:600}}>
