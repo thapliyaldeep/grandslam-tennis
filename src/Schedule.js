@@ -58,6 +58,9 @@ const S = {
 };
 
 // ─── Generate upcoming dates (next 8 weeks, weekends + weekdays) ───────────
+// Firebase keys can't contain / . # $ [ ]  -> doubles team names like A/B must be made safe
+const ak = n => String(n).replace(/[.#$\[\]\/]/g, m => (m === '/' ? ' & ' : '_'));
+
 function getUpcomingDates(weeksAhead = 8) {
   const dates = [];
   const today = new Date();
@@ -173,7 +176,7 @@ function MyAvailability({ leagueId, myName, availability, players, user }) {
   const effectiveName = playerOverride || myName;
 
   const mySlots = effectiveName
-    ? Object.entries(availability[effectiveName] || {}).map(([date, time]) => ({ date, time }))
+    ? Object.entries(availability[ak(effectiveName)] || {}).map(([date, time]) => ({ date, time }))
     : [];
 
   const addSlot = async () => {
@@ -181,7 +184,7 @@ function MyAvailability({ leagueId, myName, availability, players, user }) {
     setSaving(true);
     const slotValue = note ? `${selectedTime} — ${note}` : selectedTime;
     await dbSet(
-      `${availabilityPath(leagueId)}/${effectiveName}/${selectedDate}`,
+      `${availabilityPath(leagueId)}/${ak(effectiveName)}/${selectedDate}`,
       slotValue
     );
     setSelectedDate('');
@@ -192,7 +195,7 @@ function MyAvailability({ leagueId, myName, availability, players, user }) {
 
   const removeSlot = async (date) => {
     if (!effectiveName) return;
-    await dbSet(`${availabilityPath(leagueId)}/${effectiveName}/${date}`, null);
+    await dbSet(`${availabilityPath(leagueId)}/${ak(effectiveName)}/${date}`, null);
   };
 
   if (!myName && !playerOverride) {
@@ -302,7 +305,7 @@ function MyAvailability({ leagueId, myName, availability, players, user }) {
         ) : (
           <div>
             {players.map(player => {
-              const slots = Object.entries(availability[player] || {});
+              const slots = Object.entries(availability[ak(player)] || {});
               return (
                 <div key={player} style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: colors.baseline, marginBottom: 4 }}>
@@ -383,8 +386,8 @@ function SuggestMatch({ leagueId, lg, players, availability, matches, isManager 
   // Find common available dates between two players
   const commonSlots = (() => {
     if (!playerA || !playerB) return [];
-    const aSlots = availability[playerA] || {};
-    const bSlots = availability[playerB] || {};
+    const aSlots = availability[ak(playerA)] || {};
+    const bSlots = availability[ak(playerB)] || {};
     return Object.keys(aSlots)
       .filter(date => bSlots[date])
       .map(date => ({
@@ -420,8 +423,8 @@ function SuggestMatch({ leagueId, lg, players, availability, matches, isManager 
     });
     // Remove used availability slots
     if (date) {
-      await dbSet(`${availabilityPath(leagueId)}/${playerA}/${date}`, null);
-      await dbSet(`${availabilityPath(leagueId)}/${playerB}/${date}`, null);
+      await dbSet(`${availabilityPath(leagueId)}/${ak(playerA)}/${date}`, null);
+      await dbSet(`${availabilityPath(leagueId)}/${ak(playerB)}/${date}`, null);
     }
     setMsg(`✓ Match scheduled: ${playerA} vs ${playerB}${date ? ` on ${date}` : ''}`);
     setPlayerA(''); setPlayerB(''); setSelectedSlot(''); setVenue('');
@@ -514,7 +517,7 @@ function SuggestMatch({ leagueId, lg, players, availability, matches, isManager 
             Availability Summary
           </div>
           {[playerA, playerB].filter(Boolean).map(player => {
-            const slots = Object.entries(availability[player] || {});
+            const slots = Object.entries(availability[ak(player)] || {});
             return (
               <div key={player} style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: colors.baseline, marginBottom: 4 }}>
