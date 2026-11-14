@@ -29,7 +29,7 @@ function newLive(server = 'a') {
 
 // ─── Point logic ───────────────────────────────────────────────────────────
 function addPoint(live, side) {
-  const state = JSON.parse(JSON.stringify(live));
+  let state = JSON.parse(JSON.stringify(live));
   // Save history for undo
   const snapshot = JSON.parse(JSON.stringify(state));
   snapshot.history = [];
