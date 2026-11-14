@@ -7,6 +7,7 @@ import { auth, signInWithGoogle, signOutUser, dbGet, dbSet, dbUpdate, dbListen,
          matchesPath, matchPath, usersPath } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { colors, fonts, btn, radii, shadows } from './theme';
+import { AddPlayerForm } from './AddPlayer';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 const ADMIN_EMAIL = "deepcolour@gmail.com";
@@ -21,8 +22,9 @@ function scoreWinner(sa, sb) {
   let wa = 0, wb = 0;
   for (let i = 0; i < aSets.length; i++) {
     const [ga, gb] = aSets[i].split('-').map(Number);
-    if (ga > gb) wa++; else wb++;
+    if (ga > gb) wa++; else if (gb > ga) wb++;
   }
+  if (wa === wb) return 'tie';
   return wa > wb ? 'a' : 'b';
 }
 
@@ -942,15 +944,16 @@ function StandingsTab({lg, matches, groups, players}) {
 
   const calcStandings = (groupPlayers) => {
     return groupPlayers.map(name => {
-      let mp=0, w=0, l=0;
+      let mp=0, w=0, l=0, t=0;
       matches.forEach(m => {
         if (!m.done) return;
         if (m.a !== name && m.b !== name) return;
         mp++;
         const winner = scoreWinner(m.sa, m.sb);
-        if ((winner==='a'&&m.a===name)||(winner==='b'&&m.b===name)) w++; else l++;
+        if (winner==='tie') t++;
+        else if ((winner==='a'&&m.a===name)||(winner==='b'&&m.b===name)) w++; else l++;
       });
-      return {name, mp, w, l, pts: w*2};
+      return {name, mp, w, l, t, pts: w*2 + t};
     }).sort((a,b)=>b.pts-a.pts||b.w-a.w);
   };
 
@@ -962,7 +965,7 @@ function StandingsTab({lg, matches, groups, players}) {
       ((m.a===nameA&&m.b===nameB)||(m.a===nameB&&m.b===nameA)));
     if (!m) return null;
     const w = scoreWinner(m.sa, m.sb);
-    return w==='a' ? m.a : m.b;
+    return w==='a' ? m.a : w==='b' ? m.b : null;
   };
 
   const sf1a = standA[0]?.name, sf1b = standB[1]?.name;
@@ -1011,7 +1014,7 @@ function StandingsTab({lg, matches, groups, players}) {
               <thead>
                 <tr style={{fontSize:10,color:colors.textMuted,textTransform:'uppercase',
                   letterSpacing:0.5}}>
-                  {['Player','MP','W','L','Pts'].map(h=>(
+                  {['Player','MP','W','T','L','Pts'].map(h=>(
                     <th key={h} style={{padding:'4px 6px',
                       textAlign:h==='Player'?'left':'center',fontWeight:600}}>{h}</th>
                   ))}
@@ -1029,12 +1032,12 @@ function StandingsTab({lg, matches, groups, players}) {
                         marginRight:5,fontWeight:700}}>Q</span>}
                       {s.name}
                     </td>
-                    {[s.mp,s.w,s.l,s.pts].map((v,j)=>(
+                    {[s.mp,s.w,s.t,s.l,s.pts].map((v,j)=>(
                       <td key={j} style={{padding:'8px 6px',textAlign:'center',
                         fontFamily:fonts.mono,fontSize:13,
-                        color:j===1?colors.won:j===2?colors.lost:
-                          j===3?colors.clay:colors.textPrimary,
-                        fontWeight:j===3?700:400}}>{v}</td>
+                        color:j===1?colors.won:j===3?colors.lost:
+                          j===4?colors.clay:colors.textPrimary,
+                        fontWeight:j===4?700:400}}>{v}</td>
                     ))}
                   </tr>
                 ))}
@@ -1177,6 +1180,7 @@ function ManageTab({leagueId, players, groups, settings, isAdmin, data, user}) {
           <div style={{fontSize:13,color:colors.textMuted,marginBottom:16}}>
             Select 2 approved players to form a doubles team. Players can also be added to singles.
           </div>
+          <AddPlayerForm leagueId={leagueId}/>
           <DoublesTeamBuilder leagueId={leagueId}/>
         </div>
       )}
